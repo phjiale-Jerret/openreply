@@ -10,6 +10,15 @@ function isReel(media: InstagramMedia): boolean {
   return media.media_product_type === "REELS";
 }
 
+function captionMatches(
+  media: InstagramMedia,
+  captionMatch: string | null
+): boolean {
+  const needle = captionMatch?.trim();
+  if (!needle) return true;
+  return (media.caption ?? "").normalize("NFC").includes(needle.normalize("NFC"));
+}
+
 export type AttachNextReelResult = {
   checked: number;
   bound: number;
@@ -71,8 +80,12 @@ export async function attachPendingNextReels(): Promise<AttachNextReelResult> {
 
     for (const automation of automations) {
       // The "next" reel = the earliest one posted after the campaign was created.
+      // With a captionMatch, only a reel whose caption contains it counts, so a
+      // different reel posted in between is not bound by mistake.
       const nextReel = reels.find(
-        (reel) => new Date(reel.timestamp) > automation.createdAt
+        (reel) =>
+          new Date(reel.timestamp) > automation.createdAt &&
+          captionMatches(reel, automation.captionMatch)
       );
       if (!nextReel) continue;
 

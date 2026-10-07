@@ -178,6 +178,9 @@ model Automation {
   postId         String?
   postUrl        String?
   pendingNextReel Boolean @default(false)
+  // For a pending next-reel campaign: only bind to a reel whose caption
+  // contains this text, so an unrelated reel posted first is not picked up.
+  captionMatch    String?
   matchAnyPost   Boolean @default(false)
   keywords       String[]
   matchAnyWord   Boolean @default(false)
