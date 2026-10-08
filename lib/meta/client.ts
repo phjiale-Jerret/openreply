@@ -840,3 +840,105 @@ export async function debugToken(inputToken: string, accessToken: string) {
   const response = await fetch(url.toString());
   return handleResponse(response);
 }
+
+// ── Content publishing (reels) ──────────────────────────────────────────────
+// Instagram Login apps cannot upload a local file: Instagram fetches the video
+// from a public URL, then the container is published in a second call.
+
+export interface ReelContainerInput {
+  videoUrl: string;
+  caption: string;
+  coverUrl?: string | null;
+  thumbOffsetMs?: number | null;
+  shareToFeed?: boolean;
+}
+
+export async function createReelContainer(
+  accessToken: string,
+  instagramId: string,
+  input: ReelContainerInput
+): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    media_type: "REELS",
+    video_url: input.videoUrl,
+    caption: input.caption,
+    share_to_feed: input.shareToFeed ?? true,
+  };
+  if (input.coverUrl) body.cover_url = input.coverUrl;
+  else if (input.thumbOffsetMs != null) body.thumb_offset = input.thumbOffsetMs;
+
+  const response = await fetch(`${instagramGraphBase()}/${instagramId}/media`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+}
+
+export type ContainerStatusCode =
+  | "EXPIRED"
+  | "ERROR"
+  | "FINISHED"
+  | "IN_PROGRESS"
+  | "PUBLISHED";
+
+export async function getContainerStatus(
+  accessToken: string,
+  containerId: string
+): Promise<{ status_code: ContainerStatusCode; status?: string }> {
+  const url = new URL(`${instagramGraphBase()}/${containerId}`);
+  url.searchParams.set("fields", "status_code,status");
+  url.searchParams.set("access_token", accessToken);
+  return handleResponse(await fetch(url.toString()));
+}
+
+export async function publishContainer(
+  accessToken: string,
+  instagramId: string,
+  containerId: string
+): Promise<{ id: string }> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramId}/media_publish`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ creation_id: containerId }),
+    }
+  );
+  return handleResponse(response);
+}
+
+export async function getMediaPermalink(
+  accessToken: string,
+  mediaId: string
+): Promise<string | undefined> {
+  const url = new URL(`${instagramGraphBase()}/${mediaId}`);
+  url.searchParams.set("fields", "permalink");
+  url.searchParams.set("access_token", accessToken);
+  const data = await handleResponse<{ permalink?: string }>(
+    await fetch(url.toString())
+  );
+  return data.permalink;
+}
+
+export async function createMediaComment(
+  accessToken: string,
+  mediaId: string,
+  message: string
+): Promise<{ id: string }> {
+  const response = await fetch(`${instagramGraphBase()}/${mediaId}/comments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ message }),
+  });
+  return handleResponse(response);
+}

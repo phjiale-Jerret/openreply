@@ -1,9 +1,9 @@
-import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { buildInitialCampaignLinks } from "@/lib/campaigns/links";
 import { generateReportShareSlug } from "@/lib/reports/share";
+import { isExternalApiAuthorized } from "@/lib/external-api-auth";
 
 /**
  * Create a campaign from a script (no dashboard session).
@@ -40,19 +40,8 @@ const externalAutomationSchema = z.object({
   instagramUsername: z.string().trim().min(1).optional(),
 });
 
-function isAuthorized(request: NextRequest): boolean {
-  const key = process.env.AUTOMATION_API_KEY;
-  if (!key) return false;
-  const header = request.headers.get("authorization") ?? "";
-  const expected = Buffer.from(`Bearer ${key}`);
-  const actual = Buffer.from(header);
-  return (
-    actual.length === expected.length && timingSafeEqual(actual, expected)
-  );
-}
-
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isExternalApiAuthorized(request)) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }

@@ -2,6 +2,7 @@ import { createDMWorker } from "@/lib/queue/dm-worker";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { attachPendingNextReels } from "@/lib/automation/attach-next-reel";
+import { processScheduledPosts } from "@/lib/publishing/scheduled-posts";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -48,10 +49,32 @@ async function poll() {
 setTimeout(() => void poll(), 10_000);
 const pollTimer = setInterval(() => void poll(), POLL_INTERVAL_MS);
 
+// Scheduled reels: checked every minute so they go out close to their time.
+const PUBLISH_INTERVAL_MS = 60_000;
+let publishing = false;
+async function publishTick() {
+  if (publishing) return;
+  publishing = true;
+  try {
+    const result = await processScheduledPosts();
+    if (result.prepared > 0 || result.checked > 0) {
+      console.log("[DM Worker] Scheduled posts:", result);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[DM Worker] Scheduled posts failed:", message);
+  } finally {
+    publishing = false;
+  }
+}
+setTimeout(() => void publishTick(), 15_000);
+const publishTimer = setInterval(() => void publishTick(), PUBLISH_INTERVAL_MS);
+
 async function shutdown(signal: string) {
   console.log(`[DM Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearInterval(pollTimer);
+  clearInterval(publishTimer);
   await worker.close();
   process.exit(0);
 }

@@ -144,6 +144,7 @@ model InstagramAccount {
   dmLogs      DmLog[]
   linkClicks  LinkClick[]
   followerSnapshots FollowerSnapshot[]
+  scheduledPosts    ScheduledPost[]
 
   @@index([workspaceId])
 }
@@ -424,4 +425,44 @@ model ZernioConnection {
 model PostbackDelivery {
   id String @id
   createdAt DateTime @default(now())
+}
+
+enum ScheduledPostStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+// A reel queued to publish at a set time. The worker uploads it to Instagram
+// shortly before publishAt and publishes it at publishAt, because the
+// Instagram API has no scheduling of its own.
+model ScheduledPost {
+  id                 String   @id @default(cuid())
+  instagramAccountId String
+  name               String
+  videoUrl           String
+  caption            String
+  coverUrl           String?
+  thumbOffsetMs      Int?
+  shareToFeed        Boolean  @default(true)
+  firstComment       String?
+  publishAt          DateTime
+  status             ScheduledPostStatus @default(PENDING)
+  containerId        String?
+  mediaId            String?
+  permalink          String?
+  attempts           Int      @default(0)
+  lastError          String?
+  publishedAt        DateTime?
+  // Set when the owner was emailed the outcome, so it is sent once.
+  notifiedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([status, publishAt])
+  @@index([instagramAccountId])
 }
