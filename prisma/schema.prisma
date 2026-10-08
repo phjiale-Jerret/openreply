@@ -181,6 +181,9 @@ model Automation {
   // For a pending next-reel campaign: only bind to a reel whose caption
   // contains this text, so an unrelated reel posted first is not picked up.
   captionMatch    String?
+  // Let a pending campaign bind to any post type (carousel, image) instead of
+  // reels only. Off by default so existing next-reel campaigns are unchanged.
+  bindAnyMediaType Boolean @default(false)
   matchAnyPost   Boolean @default(false)
   keywords       String[]
   matchAnyWord   Boolean @default(false)

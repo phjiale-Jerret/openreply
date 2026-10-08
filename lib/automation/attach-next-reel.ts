@@ -63,13 +63,11 @@ export async function attachPendingNextReels(): Promise<AttachNextReelResult> {
     checked += automations.length;
     if (!account || !hasInstagramCredentials(account)) continue;
 
-    let reels: InstagramMedia[];
+    let posts: InstagramMedia[];
     try {
       const context = await createInstagramContext(account);
       const media = await getUserMedia({ context, limit: 25 });
-      reels = media
-        .filter(isReel)
-        .sort(
+      posts = media.sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
     } catch (error) {
@@ -82,10 +80,13 @@ export async function attachPendingNextReels(): Promise<AttachNextReelResult> {
       // The "next" reel = the earliest one posted after the campaign was created.
       // With a captionMatch, only a reel whose caption contains it counts, so a
       // different reel posted in between is not bound by mistake.
-      const nextReel = reels.find(
-        (reel) =>
-          new Date(reel.timestamp) > automation.createdAt &&
-          captionMatches(reel, automation.captionMatch)
+      // bindAnyMediaType campaigns (carousels) may take any post type; the
+      // rest stay reels-only.
+      const nextReel = posts.find(
+        (post) =>
+          (automation.bindAnyMediaType || isReel(post)) &&
+          new Date(post.timestamp) > automation.createdAt &&
+          captionMatches(post, automation.captionMatch)
       );
       if (!nextReel) continue;
 

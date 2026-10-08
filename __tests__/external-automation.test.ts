@@ -91,6 +91,14 @@ describe("POST /api/automations/external", () => {
     );
   });
 
+  it("stores anyMediaType so the campaign can bind a carousel (default reels only)", async () => {
+    await POST(request(BODY));
+    expect(mockPrisma.automation.create.mock.calls[0][0].data.bindAnyMediaType).toBe(false);
+    mockPrisma.automation.create.mockClear();
+    await POST(request({ ...BODY, anyMediaType: true }));
+    expect(mockPrisma.automation.create.mock.calls[0][0].data.bindAnyMediaType).toBe(true);
+  });
+
   it("returns 409 naming the campaign already waiting for the same caption", async () => {
     mockPrisma.automation.findMany.mockResolvedValue([
       { id: "auto_0", name: "EP12 buff" },

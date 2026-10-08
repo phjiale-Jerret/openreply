@@ -9,7 +9,7 @@ import { generateReportShareSlug } from "@/lib/reports/share";
  * Create a campaign from a script (no dashboard session).
  *
  * Auth is a bearer key in AUTOMATION_API_KEY. Every campaign made here waits
- * for the next reel and binds only to one whose caption contains captionMatch
+ * for the next reel (or any post with anyMediaType) and binds only to one whose caption contains captionMatch
  * (default: 留言「<first keyword>」), so publishing a different reel first does
  * not steal it. The follow gate, link button and no-opening-DM settings are
  * fixed to the channel's house style.
@@ -34,6 +34,8 @@ const externalAutomationSchema = z.object({
   linkUrl: z.string().url(),
   linkButtonLabel: z.string().trim().min(1).max(20).optional(),
   captionMatch: z.string().trim().min(1).max(200).optional(),
+  // true: also bind a carousel or image post (default: reels only).
+  anyMediaType: z.boolean().optional().default(false),
   // Only needed when more than one Instagram account is connected.
   instagramUsername: z.string().trim().min(1).optional(),
 });
@@ -131,6 +133,7 @@ export async function POST(request: NextRequest) {
       postUrl: null,
       pendingNextReel: true,
       captionMatch,
+      bindAnyMediaType: input.anyMediaType,
       matchAnyPost: false,
       keywords: input.keywords,
       matchAnyWord: false,

@@ -27,13 +27,30 @@ import { attachPendingNextReels } from "../lib/automation/attach-next-reel";
 
 const ACCOUNT = { id: "account_1", accessToken: "x", provider: "META" };
 
-function campaign(id: string, captionMatch: string | null, createdAt: string) {
+function campaign(
+  id: string,
+  captionMatch: string | null,
+  createdAt: string,
+  bindAnyMediaType = false
+) {
   return {
     id,
     instagramAccountId: ACCOUNT.id,
     instagramAccount: ACCOUNT,
     captionMatch,
+    bindAnyMediaType,
     createdAt: new Date(createdAt),
+  };
+}
+
+function carousel(id: string, caption: string, timestamp: string) {
+  return {
+    id,
+    caption,
+    timestamp,
+    permalink: `https://www.instagram.com/p/${id}/`,
+    media_type: "CAROUSEL_ALBUM",
+    media_product_type: "FEED",
   };
 }
 
@@ -149,5 +166,34 @@ describe("attachPendingNextReels", () => {
       pendingNextReel: false,
       postUrl: "https://www.instagram.com/reel/first/",
     });
+  });
+
+  it("binds a carousel to a campaign that allows any media type", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      campaign("img", "留言「Watch」", "2026-10-07T00:00:00Z", true),
+    ]);
+    getUserMedia.mockResolvedValue([
+      carousel("post_watch", "輪播\n留言「Watch」拿安裝指令", "2026-10-07T01:00:00Z"),
+    ]);
+
+    await attachPendingNextReels();
+
+    expect(boundTo()).toEqual({ img: "post_watch" });
+    expect(mockPrisma.automation.update.mock.calls[0][0].data.postUrl).toBe(
+      "https://www.instagram.com/p/post_watch/"
+    );
+  });
+
+  it("never binds a carousel to a reels-only campaign, even when the caption matches", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      campaign("v03", "它就能幫你剪片", "2026-10-07T00:00:00Z"),
+    ]);
+    getUserMedia.mockResolvedValue([
+      carousel("post", "Claude Code：它就能幫你剪片", "2026-10-07T01:00:00Z"),
+    ]);
+
+    await attachPendingNextReels();
+
+    expect(mockPrisma.automation.update).not.toHaveBeenCalled();
   });
 });
