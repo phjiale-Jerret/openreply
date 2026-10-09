@@ -5,6 +5,8 @@ import { decryptToken } from "@/lib/meta/oauth";
 import {
   MetaApiError,
   RateLimitError,
+  createCarouselContainer,
+  createCarouselItemContainer,
   createMediaComment,
   createReelContainer,
   getContainerStatus,
@@ -77,13 +79,31 @@ async function recordEvent(
     .catch(() => {});
 }
 
-async function deleteBlob(videoUrl: string) {
+async function deleteBlobs(post: PostWithAccount) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
-  if (!new URL(videoUrl).hostname.endsWith("blob.vercel-storage.com")) return;
+  const urls = [post.videoUrl, post.coverUrl, ...post.imageUrls].filter(
+    (url): url is string =>
+      !!url && new URL(url).hostname.endsWith("blob.vercel-storage.com")
+  );
+  if (urls.length === 0) return;
   try {
-    await del(videoUrl);
+    await del(urls);
   } catch (error) {
     console.error("[scheduled-posts] blob delete failed", errorMessage(error));
+  }
+}
+
+// Image items usually finish at once; wait briefly so the parent container
+// is not created over children Instagram is still fetching.
+async function waitForItems(token: string, ids: string[]) {
+  for (let i = 0; i < 10; i++) {
+    const statuses = await Promise.all(ids.map((id) => getContainerStatus(token, id)));
+    const bad = statuses.find((s) => s.status_code === "ERROR" || s.status_code === "EXPIRED");
+    if (bad) {
+      throw new MetaApiError(0, undefined, undefined, `carousel item ${bad.status_code}: ${bad.status ?? ""}`);
+    }
+    if (statuses.every((s) => s.status_code === "FINISHED")) return;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
 
@@ -105,20 +125,34 @@ async function fail(post: PostWithAccount, error: unknown, stage: string) {
     where: { id: post.id },
     data: { status: "FAILED", attempts, lastError: message },
   });
-  await recordEvent(post, "ERROR", `Scheduled reel failed: ${post.name}`);
+  await recordEvent(post, "ERROR", `Scheduled post failed: ${post.name}`);
   await notify(post.id);
 }
 
 async function prepare(post: PostWithAccount) {
   try {
     const token = decryptToken(post.instagramAccount.accessToken);
-    const container = await createReelContainer(token, post.instagramAccount.instagramId, {
-      videoUrl: post.videoUrl,
-      caption: post.caption,
-      coverUrl: post.coverUrl,
-      thumbOffsetMs: post.thumbOffsetMs,
-      shareToFeed: post.shareToFeed,
-    });
+    const instagramId = post.instagramAccount.instagramId;
+    let container: { id: string };
+    if (post.imageUrls.length > 0) {
+      const childIds: string[] = [];
+      for (const imageUrl of post.imageUrls) {
+        childIds.push((await createCarouselItemContainer(token, instagramId, imageUrl)).id);
+      }
+      await waitForItems(token, childIds);
+      container = await createCarouselContainer(token, instagramId, {
+        childIds,
+        caption: post.caption,
+      });
+    } else {
+      container = await createReelContainer(token, instagramId, {
+        videoUrl: post.videoUrl!,
+        caption: post.caption,
+        coverUrl: post.coverUrl,
+        thumbOffsetMs: post.thumbOffsetMs,
+        shareToFeed: post.shareToFeed,
+      });
+    }
     await prisma.scheduledPost.update({
       where: { id: post.id },
       data: { containerId: container.id },
@@ -147,7 +181,7 @@ async function publish(post: PostWithAccount, now: Date) {
 
   if (statusCode === "IN_PROGRESS") {
     if (now.getTime() - post.publishAt.getTime() > PROCESSING_TIMEOUT_MS) {
-      await fail(post, new MetaApiError(0, undefined, undefined, "Instagram still processing the video after 60 minutes"), "processing");
+      await fail(post, new MetaApiError(0, undefined, undefined, "Instagram still processing the post after 60 minutes"), "processing");
     }
     return;
   }
@@ -187,15 +221,15 @@ async function publish(post: PostWithAccount, now: Date) {
       });
     }
   }
-  await deleteBlob(post.videoUrl);
-  await recordEvent(post, "INFO", `Scheduled reel published: ${post.name}`);
+  await deleteBlobs(post);
+  await recordEvent(post, "INFO", `Scheduled post published: ${post.name}`);
   await notify(post.id);
 }
 
 export type ProcessScheduledPostsResult = { prepared: number; checked: number };
 
 /**
- * One tick of the publisher: upload reels that are due soon, then publish the
+ * One tick of the publisher: upload reels and carousels that are due soon, then publish the
  * ones whose time has come. Safe to run every minute; each post moves through
  * PENDING → PROCESSING (container uploaded) → PUBLISHED or FAILED.
  */

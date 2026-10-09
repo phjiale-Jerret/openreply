@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 
 /**
- * Email the owner the outcome of a scheduled reel. Called by the worker,
+ * Email the owner the outcome of a scheduled post. Called by the worker,
  * which has no mail key. No auth on purpose: the body is only an id, the
  * content comes from the database, and each outcome is sent at most once, so
  * a stray call can at most deliver the email that was due anyway.
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         ]
           .filter(Boolean)
           .join("\n")
-      : `預定時間：${formatTaipei(post.publishAt)}\n錯誤：${post.lastError}\n\n影片沒有發出去，請回 Claude 處理。`;
+      : `預定時間：${formatTaipei(post.publishAt)}\n錯誤：${post.lastError}\n\n沒有發出去，請回 Claude 處理。`;
 
   const apiKey = process.env.RESEND_API_KEY;
   const to =

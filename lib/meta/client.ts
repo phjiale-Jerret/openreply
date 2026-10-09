@@ -878,6 +878,47 @@ export async function createReelContainer(
   return handleResponse(response);
 }
 
+// A carousel is one container per image (is_carousel_item), then a parent
+// CAROUSEL container listing them. Images must be JPEG at a public URL.
+async function postMediaContainer(
+  accessToken: string,
+  instagramId: string,
+  body: Record<string, unknown>
+): Promise<{ id: string }> {
+  const response = await fetch(`${instagramGraphBase()}/${instagramId}/media`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+}
+
+export async function createCarouselItemContainer(
+  accessToken: string,
+  instagramId: string,
+  imageUrl: string
+): Promise<{ id: string }> {
+  return postMediaContainer(accessToken, instagramId, {
+    image_url: imageUrl,
+    is_carousel_item: true,
+  });
+}
+
+export async function createCarouselContainer(
+  accessToken: string,
+  instagramId: string,
+  input: { childIds: string[]; caption: string }
+): Promise<{ id: string }> {
+  return postMediaContainer(accessToken, instagramId, {
+    media_type: "CAROUSEL",
+    children: input.childIds.join(","),
+    caption: input.caption,
+  });
+}
+
 export type ContainerStatusCode =
   | "EXPIRED"
   | "ERROR"

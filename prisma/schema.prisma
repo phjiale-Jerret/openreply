@@ -442,7 +442,9 @@ model ScheduledPost {
   id                 String   @id @default(cuid())
   instagramAccountId String
   name               String
-  videoUrl           String
+  // A reel has videoUrl; a carousel has 2–10 imageUrls (JPEG) and no video.
+  videoUrl           String?
+  imageUrls          String[] @default([])
   caption            String
   coverUrl           String?
   thumbOffsetMs      Int?

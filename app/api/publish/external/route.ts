@@ -4,27 +4,32 @@ import { prisma } from "@/lib/db/client";
 import { isExternalApiAuthorized } from "@/lib/external-api-auth";
 
 /**
- * Queue a reel to publish at a set time (no dashboard session).
+ * Queue a reel or a carousel to publish at a set time (no dashboard session).
  *
- * The video must already sit at a public URL (the upload script puts it in
- * Vercel Blob). The worker uploads it to Instagram 15 minutes before
- * publishAt, publishes at publishAt, then deletes the blob.
+ * The video (or 2–10 JPEG images) must already sit at public URLs (the upload
+ * script puts them in Vercel Blob). The worker uploads to Instagram 15
+ * minutes before publishAt, publishes at publishAt, then deletes the blobs.
  */
 
 export const dynamic = "force-dynamic";
 
-const scheduledPostSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  videoUrl: z.string().url(),
-  caption: z.string().max(2200),
-  publishAt: z.string().datetime({ offset: true }),
-  coverUrl: z.string().url().optional(),
-  thumbOffsetMs: z.number().int().min(0).optional(),
-  shareToFeed: z.boolean().optional().default(true),
-  firstComment: z.string().trim().min(1).max(2200).optional(),
-  // Only needed when more than one Instagram account is connected.
-  instagramUsername: z.string().trim().min(1).optional(),
-});
+const scheduledPostSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    videoUrl: z.string().url().optional(),
+    imageUrls: z.array(z.string().url()).min(2).max(10).optional(),
+    caption: z.string().max(2200),
+    publishAt: z.string().datetime({ offset: true }),
+    coverUrl: z.string().url().optional(),
+    thumbOffsetMs: z.number().int().min(0).optional(),
+    shareToFeed: z.boolean().optional().default(true),
+    firstComment: z.string().trim().min(1).max(2200).optional(),
+    // Only needed when more than one Instagram account is connected.
+    instagramUsername: z.string().trim().min(1).optional(),
+  })
+  .refine((input) => !!input.videoUrl !== !!input.imageUrls, {
+    message: "Pass either videoUrl (reel) or imageUrls (carousel)",
+  });
 
 function unauthorized() {
   return NextResponse.json(
@@ -76,6 +81,7 @@ export async function POST(request: NextRequest) {
       instagramAccountId: accounts[0].id,
       name: input.name,
       videoUrl: input.videoUrl,
+      imageUrls: input.imageUrls ?? [],
       caption: input.caption,
       publishAt: new Date(input.publishAt),
       coverUrl: input.coverUrl,
@@ -100,6 +106,7 @@ export async function GET(request: NextRequest) {
     select: {
       id: true,
       name: true,
+      imageUrls: true,
       publishAt: true,
       status: true,
       permalink: true,

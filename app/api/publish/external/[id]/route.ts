@@ -4,7 +4,7 @@ import { isExternalApiAuthorized } from "@/lib/external-api-auth";
 
 export const dynamic = "force-dynamic";
 
-/** Cancel a queued reel. Only a post not yet uploaded (PENDING) can be canceled. */
+/** Cancel a queued post. Only a post not yet uploaded (PENDING) can be canceled. */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,5 +26,11 @@ export async function DELETE(
       { status: 409 }
     );
   }
-  return NextResponse.json({ success: true });
+  // The caller deletes these temporary blobs; the worker never will now.
+  const post = await prisma.scheduledPost.findUniqueOrThrow({
+    where: { id },
+    select: { videoUrl: true, coverUrl: true, imageUrls: true },
+  });
+  const blobUrls = [post.videoUrl, post.coverUrl, ...post.imageUrls].filter(Boolean);
+  return NextResponse.json({ success: true, blobUrls });
 }
